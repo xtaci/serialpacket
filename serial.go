@@ -48,28 +48,28 @@ type Conn struct {
 	header rawHeader
 }
 
-func (conn *Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+func (c *Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	// read full header
-	n, err = io.ReadFull(conn.port, conn.header[:])
+	n, err = io.ReadFull(c.port, c.header[:])
 	if err != nil {
 		return 0, nil, err
 	}
 
-	sz := conn.header.Length()
+	sz := c.header.Length()
 	if len(p) < sz {
-		return 0, addr, fmt.Errorf("buffer size exceeded:need %v, given %v", sz, len(p))
+		return 0, c.raddr, fmt.Errorf("buffer size exceeded:need %v, given %v", sz, len(p))
 	}
 
 	// read full body
-	n, err = io.ReadFull(conn.port, p[:sz])
+	n, err = io.ReadFull(c.port, p[:sz])
 	if err != nil {
-		return n, addr, err
+		return n, c.raddr, err
 	}
 
-	return n, addr, nil
+	return n, c.raddr, nil
 }
 
-func (conn *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
+func (c *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 	if len(p) > MTU {
 		return 0, fmt.Errorf("packet too large(MTU:%v) actual %v", MTU, len(p))
 	}
@@ -83,7 +83,7 @@ func (conn *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 	// write full packet until error
 	written := 0
 	for len(packet) > 0 {
-		n, err = conn.port.Write(packet)
+		n, err = c.port.Write(packet)
 		if err != nil {
 			return written, err
 		} else {
@@ -95,11 +95,11 @@ func (conn *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 	return written - HEADER_SIZE, nil
 }
 
-func (conn *Conn) Close() error                       { return conn.port.Close() }
-func (conn *Conn) LocalAddr() net.Addr                { return conn.addr }
-func (conn *Conn) SetDeadline(t time.Time) error      { return ErrNotImplemented }
-func (conn *Conn) SetReadDeadline(t time.Time) error  { return ErrNotImplemented }
-func (conn *Conn) SetWriteDeadline(t time.Time) error { return ErrNotImplemented }
+func (c *Conn) Close() error                       { return c.port.Close() }
+func (c *Conn) LocalAddr() net.Addr                { return c.addr }
+func (c *Conn) SetDeadline(t time.Time) error      { return ErrNotImplemented }
+func (c *Conn) SetReadDeadline(t time.Time) error  { return ErrNotImplemented }
+func (c *Conn) SetWriteDeadline(t time.Time) error { return ErrNotImplemented }
 
 // NewConn creates a net.PacketConn on a serial line
 func NewConn(port *serial.Port) (*Conn, error) {
