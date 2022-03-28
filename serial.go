@@ -1,6 +1,7 @@
 package serialpacket
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -11,12 +12,13 @@ import (
 )
 
 // Frame Definition
-// 	|MAGIC(4B) | LENGTH (1B) | RESERVE(1B) | DATA (LENGTH) |
+// 	|MAGIC(4B) | LENGTH (2B) | DATA (LENGTH) |
 // Max Packet Size: 240
 const (
-	HEADER_SIZE = 2
-	MAGIC_SIZE  = 4
-	MTU         = 240
+	HEADER_SIZE   = 2
+	MAGIC_SIZE    = 4
+	MTU           = 1000
+	MAX_DATA_SIZE = MTU - HEADER_SIZE - MAGIC_SIZE
 )
 
 var (
@@ -30,7 +32,7 @@ var (
 // header definition
 type rawHeader [HEADER_SIZE]byte
 
-func (h rawHeader) Length() int { return int(h[0]) }
+func (h rawHeader) Length() int { return int(binary.LittleEndian.Uint16(h[:])) }
 
 // SerialPacketAddr is the address definition in net.Addr
 type SerialPacketAddr struct{ name string }
@@ -98,8 +100,8 @@ func (c *Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 }
 
 func (c *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
-	if len(p) > MTU {
-		return 0, fmt.Errorf("packet too large(MTU:%v) actual %v", MTU, len(p))
+	if len(p) > MAX_DATA_SIZE {
+		return 0, fmt.Errorf("packet too large(MAX_DATA_SIZE:%v) actual %v", MAX_DATA_SIZE, len(p))
 	}
 
 	packet := make([]byte, MAGIC_SIZE+HEADER_SIZE+len(p))
@@ -107,7 +109,7 @@ func (c *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 	copy(magic, MagicBytes)
 
 	header := magic[MAGIC_SIZE:]
-	header[0] = byte(len(p))
+	binary.LittleEndian.PutUint16(header, uint16(len(p)))
 
 	data := header[HEADER_SIZE:]
 	copy(data, p)
