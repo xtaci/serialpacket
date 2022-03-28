@@ -11,11 +11,16 @@ import (
 )
 
 // Frame Definition
-// 	| LENGTH (1B) | DATA (LENGTH) |
+// 	|MAGIC(4B) | LENGTH (1B) | RESERVE(1B) | DATA (LENGTH) |
 // Max Packet Size: 240
 const (
-	HEADER_SIZE = 1
+	HEADER_SIZE = 2
+	MAGIC_SIZE  = 4
 	MTU         = 240
+)
+
+var (
+	MagicBytes = []byte{0xFF, 0x00, 0xAA, 0x55}
 )
 
 var (
@@ -42,18 +47,40 @@ func NewSerialPacketAddr(name string) *SerialPacketAddr {
 
 // Conn is the packet connection definition for a serial connection
 type Conn struct {
-	port   *serial.Port
-	addr   *SerialPacketAddr
-	raddr  *SerialPacketAddr
-	header rawHeader
+	port     *serial.Port
+	addr     *SerialPacketAddr
+	raddr    *SerialPacketAddr
+	header   rawHeader
+	magicPos int
+	magic    [4]byte
 }
 
 func (c *Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
+	// 0xFF00AA55 to sync frame
+	for {
+		n, err = c.port.Read(c.magic[c.magicPos : c.magicPos+1])
+		if err != nil {
+			return 0, nil, err
+		}
+
+		if c.magic[c.magicPos] != MagicBytes[c.magicPos] {
+			c.magicPos = 0
+			continue
+		}
+
+		if c.magicPos == 3 {
+			c.magicPos = 0
+			break
+		}
+		c.magicPos++
+	}
+
 	// read full header
 	n, err = io.ReadFull(c.port, c.header[:])
 	if err != nil {
 		return 0, nil, err
 	}
+	// log.Println("header:", c.header)
 
 	sz := c.header.Length()
 	if len(p) < sz {
@@ -66,6 +93,7 @@ func (c *Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 		return n, c.raddr, err
 	}
 
+	//log.Println("body:", sz, p[:sz])
 	return n, c.raddr, nil
 }
 
@@ -74,10 +102,14 @@ func (c *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 		return 0, fmt.Errorf("packet too large(MTU:%v) actual %v", MTU, len(p))
 	}
 
-	packet := make([]byte, HEADER_SIZE+len(p))
-	header := packet[:HEADER_SIZE]
-	data := packet[HEADER_SIZE:]
+	packet := make([]byte, MAGIC_SIZE+HEADER_SIZE+len(p))
+	magic := packet[:]
+	copy(magic, MagicBytes)
+
+	header := magic[MAGIC_SIZE:]
 	header[0] = byte(len(p))
+
+	data := header[HEADER_SIZE:]
 	copy(data, p)
 
 	// write full packet until error
@@ -92,7 +124,7 @@ func (c *Conn) WriteTo(p []byte, _ net.Addr) (n int, err error) {
 		}
 	}
 
-	return written - HEADER_SIZE, nil
+	return written - HEADER_SIZE - MAGIC_SIZE, nil
 }
 
 func (c *Conn) Close() error                       { return c.port.Close() }

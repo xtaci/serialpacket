@@ -63,7 +63,7 @@ func TestConnection(t *testing.T) {
 			if err != nil {
 				return
 			}
-			s.(*kcp.UDPSession).SetMtu(200)
+			s.(*kcp.UDPSession).SetMtu(20)
 			go handleEcho(s.(*kcp.UDPSession))
 		}
 	}()
