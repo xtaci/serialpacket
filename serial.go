@@ -12,10 +12,10 @@ import (
 
 // Frame Definition
 // 	| LENGTH (1B) | DATA (LENGTH) |
-// Max Packet Size: 254
+// Max Packet Size: 240
 const (
 	HEADER_SIZE = 1
-	MTU         = 254
+	MTU         = 240
 )
 
 var (
@@ -57,7 +57,7 @@ func (c *Conn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 
 	sz := c.header.Length()
 	if len(p) < sz {
-		return 0, c.raddr, fmt.Errorf("buffer size exceeded:need %v, given %v", sz, len(p))
+		return 0, c.raddr, fmt.Errorf("buffer too small: need %v, given %v", sz, len(p))
 	}
 
 	// read full body
